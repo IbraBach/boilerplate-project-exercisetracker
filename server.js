@@ -15,12 +15,12 @@ app.use(bodyParser.json());
 
 const userSchema = new Schema({
   username: {type: String, required: true},
-  logs: [{
+  log: [{
     description: {type: String, required: true},
     duration: {type: Number, required: true},
     date: {type: String}
   }]
-});
+}, { versionKey: false });
 
 app.use(cors());
 app.use(express.static('public'))
@@ -63,73 +63,73 @@ app.get("/api/users", (req, res, next) => {
   });
 });
 
-/*const update = (req, done) => {
-  console.log(req.params);
-  console.log(req.body);
-  User.findById(req.params, (err, user) => {
-    err ? console.error(err) : user;
-    if(req.body.date == null || req.body.date == undefined || req.body.date == ''){
-      req.body.date = new Date().toISOString().slice(0, 10);
-    }
-    user.logs.push(req.body);
-    user.markModified("edited-field");
-    user.save((err, user) => {
+/*POST EXERCISES*/
+const postExercise = (id, data, done) => {
+  if (data.date == null || data.date == '')
+    data.date = new Date().toISOString().slice(0, 10);
+  User.findById(id, (err, user) => {
+    user.log.push(data);
+    user.save((err, data)=> {
       if (err)
-        return done(err)      
+        return done(err);
       return done(null, user);
-    })
+    });
+    
   });
-}
+};
 
-app.post("/api/users/:_id/exercises", (req, res, next) => {
-  let request = {params : req.params, body: req.body};
-  update(request, (err, data)=> {
+app.post('/api/users/:_id/exercises', (req, res, next) => {
+  const { _id, description, duration, date } = req.body || req.params;
+  postExercise(req.params, req.body, (err, user) => {
     if (err) {
       return next({ message: err});
     }
-    console.log(data);
+    let date = new Date(user.log[user.log.length-1].date).toDateString()
+    let data = {
+      username: user.username,
+      description: user.log[user.log.length-1].description,
+      duration: user.log[user.log.length-1].duration,
+      _id: user._id,
+      date: date
+    }
     res.json(data);
   });
 });
 
-const getExercises = (req, done) => {
-  let resElem = {description: '', duration: 0, date: ''};
-  let resArr = [];
-  let finalOb = {count: 0, logs: []};
-  //console.log(req);
-  User.findById(req)
-  .limit(5)
-  //.limit(req.limt)
-  .exec((err, user) => {
-    if (user.logs != null || user.logs != [] ){
-      for (let i = 0; i < user.logs.length; i++){
-        resElem.description = user.logs[i].description;
-        resElem.duration = user.logs[i].duration;
-        resElem.date = user.logs[i].date;
-        resArr.push(resElem);
+/* GET EXERCISES*/
+app.get("/api/users", (req, res, next) => {
+  getAll((err, data) => {
+      if (err) {
+        return next({ message: err});
       }
-    }
-    console.log("The user's exercises: ");
-    console.log(resArr);
-    finalOb.count = resArr.length;
-    finalOb.logs = resArr;
-    //console.log(user.exercises);
-    err ? console.error(err) : finalOb.logs;
-  }).countDocuments();
-}
+      res.json(data);
+  });
+});
 
-app.get("/api/users/:_id/logs", (req, res, next) => {
-  console.log("req.params");
-  console.log(req.params);
-  getExercises(req.params,(err, data) => {
+/*GET EXERCISES*/
+const getExercise = (id, done) => {
+  User.findById(id,(err, user) => {
+    if (err)
+      return done(err);
+    return done(null, user);    
+  });
+};
+
+app.get('/api/users/:_id/logs', (req, res, next) => {
+  getExercise(req.params, (err, user) => {
+    let logs = user.log;
     if (err) {
       return next({ message: err});
     }
-    console.log("The user's exercises: ");
-    console.log(data);
-    res.json(data);
-  })
-});*/
+    if((req.query.from) && (req.query.to)){
+      logs = logs.filter((data)=> (Date.parse(data.date) >= Date.parse(req.query.from)) && (Date.parse(data.date) <= Date.parse(req.query.to)));
+    }
+    if(req.query.limit){
+      logs = logs.filter((data,limit)=> limit < req.query.limit);
+    }
+    res.json({_id: user._id, username: user.username, log: logs, count: logs.length});
+  });
+});
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log('Your app is listening on port ' + listener.address().port)
